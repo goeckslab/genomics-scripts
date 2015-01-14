@@ -30,8 +30,9 @@ ANNOVAR_DATABASES = [
     # Most recent 1000 genomes.
     { 'name': '1000g2014oct', 'host': 'annovar' },
 
-    # Most recent dbSNP.
+    # Most recent dbSNP + non-flagged as well.
     { 'name': 'snp138', 'host': 'annovar' },
+    { 'name': 'snp138NonFlagged', 'host': 'annovar' },
 
     # COSMIC cancer db.
     { 'name': 'cosmic70', 'host': 'annovar' },
