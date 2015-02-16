@@ -11,8 +11,8 @@ PREPROCESS=/groups/cbi/jgoecks/tools/bin/vcfallelicprimitives
 # 2. Preprocess VCF, e.g. to create primitives.
 parallel "${PREPROCESS} {} > {.}_prim.vcf" ::: *.vcf
 
-# 3. Filter vcfs by depth and quality:
-parallel "vcffilter -f 'DP > {2}' -f 'QUAL > {3}' {1} > {1.}_DP{2}_QUAL{3}.vcf" ::: *_prim.vcf ::: 0 20 50 100 ::: 0 1 5 10 20
+# 3. Filter vcfs by depth and allelic balance:
+parallel "vcffilter -f 'DP > {2}' -f 'AB > {3}' {1} > {1.}_DP{2}_AB{3}.vcf" ::: *_prim.vcf ::: 0 20 50 100 ::: 0.01 0.02 0.025 0.03 0.035 0.04 0.045 0.05
 
 # 4. Sort, compress, and index all VCF files in a directory.
 parallel '(grep ^# {}; grep -v ^# {} | sort -k1,1 -k2,2n) | bgzip > {}.sorted.gz; tabix -p vcf {}.sorted.gz' ::: *_prim*.vcf
