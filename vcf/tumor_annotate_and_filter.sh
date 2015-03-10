@@ -5,9 +5,11 @@ module load parallel
 
 JOBS=16
 
+#TODO: make AB parameter configurable, try 1% for hotspots.
+
 # 1. Process variants so that there is one variant per line (vcfallelicprimitives, vcfreakmulti), filter to remove variants with reference genotype (these are created when processing variants), 
 # and name sample using filename.
-parallel -j ${JOBS} "vcfallelicprimitives -k {} | vcfbreakmulti | /groups/cbi/jgoecks/projects/genomics-scripts/vcf/filter_ref_gts.awk | sed 's/unknown/{.}/' > {.}_norm.vcf" ::: *.vcf
+parallel -j ${JOBS} "vcfallelicprimitives -k {} | vcfbreakmulti | sed 's/unknown/{.}/' > {.}_norm.vcf" ::: *.vcf
 
 # 2. Filter by allelic balance, proximity to homopolymer runs, and depth.
 parallel -j ${JOBS} "vcffilter -f 'AB > 0.02' -f 'HP < 5' -f 'DP > 200' {} > {.}_AB_2pct.vcf" ::: *norm.vcf
@@ -45,6 +47,6 @@ parallel "echo -n {} ''; grep -v ^# {} | wc -l" ::: *novel.vcf | sort -k1,1 > no
 parallel "echo -n {} ''; grep -v ^# {} | wc -l" ::: *no_common_or_silent_docm.vcf | sort -k1,1 > docm_counts.txt
 parallel "echo -n {} ''; grep -v ^# {} | wc -l" ::: *no_common_or_silent_pct.vcf | sort -k1,1 > pct_counts.txt
 parallel "echo -n {} ''; grep -v ^# {} | wc -l" ::: *somatic.vcf | sort -k1,1 > somatic_counts.txt
-(echo '# Sample TCGA Novel DOCM Total PCT'; paste -d' ' tcga_counts.txt novel_counts.txt docm_counts.txt somatic_counts.txt pct_counts.txt | cut -f1,2,4,6,8,10 -d ' ') | sed -r 's/\_norm([A-Za-z0-9\.\_])+//' > total_counts.txt
+(echo '#Sample TCGA Novel DOCM Total PCT'; paste -d' ' tcga_counts.txt novel_counts.txt docm_counts.txt somatic_counts.txt pct_counts.txt | cut -f1,2,4,6,8,10 -d ' ') | sed -r 's/\_norm([A-Za-z0-9\.\_])+//' > total_counts.txt
 
 
