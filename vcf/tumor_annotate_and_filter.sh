@@ -3,14 +3,25 @@
 
 module load parallel
 
-JOBS=16
-DP=200
+#TODO: make AB configurable, try 1% for hotspots.
 
-#TODO: make AB, DP parameter configurable, try 1% for hotspots.
+# Arguments check.
+if [ $# -ne "1" ]
+then
+  echo "Usage: `basename $0` <depth>"
+  exit -1
+fi
+
+JOBS=16
+DP=$1
+
+# Setup.
+mkdir tumor_annotate_and_filter_DP${DP}
+pushd tumor_annotate_and_filter_DP${DP}
 
 # Process variants so that there is one variant per line (vcfallelicprimitives, vcfreakmulti), filter to remove variants with reference genotype (these are created when processing variants), 
 # and name sample using filename.
-parallel -j ${JOBS} "vcfallelicprimitives -k {} | vcfbreakmulti | sed 's/unknown/{.}/' > {.}_norm.vcf" ::: *.vcf
+parallel -j ${JOBS} "vcfallelicprimitives -k {} | vcfbreakmulti | sed \"s/unknown/{/.}/\" > {/.}_norm.vcf" ::: ../*.vcf
 
 # Filter by allelic balance, proximity to homopolymer runs, and depth.
 parallel -j ${JOBS} "vcffilter -f 'AB > 0.02' -f 'HP < 5' -f 'DP > ${DP}' {} > {.}_DP_${DP}_AB_2pct.vcf" ::: *norm.vcf
@@ -50,4 +61,11 @@ parallel "echo -n {} ''; grep -v ^# {} | wc -l" ::: *docm_luad.vcf | sort -k1,1 
 parallel "echo -n {} ''; grep -v ^# {} | wc -l" ::: *somatic.vcf | sort -k1,1 > somatic_counts.txt
 (echo '#Sample TCGA Novel DOCM DOCM_lung DOCM_luad Total'; paste -d' ' tcga_counts.txt novel_counts.txt docm_counts.txt docm_lung_or_nsclc_counts.txt docm_luad_counts.txt somatic_counts.txt | cut -f1,2,4,6,8,10,12 -d ' ') | sed -r 's/\_norm([A-Za-z0-9\.\_])+//' > total_counts.txt
 
+# Combine somatic mutations and fixup.
+vcfcombine *somatic.vcf | vcffixup > combined_somatic_final.vcf
 
+# Filter to get validated somatic mutations.
+vcffilter -o -f 'AC > 1' -f 'DOCM_LUNG_OR_NSCLC = TRUE' -f 'DOCM_LUAD = TRUE' -f 'TCGA = TRUE' combined_somatic_final.vcf > filtered_combined_somatic_final.vcf
+
+# Cleanup.
+popd
