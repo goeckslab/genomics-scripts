@@ -19,7 +19,7 @@ DP=$1
 mkdir tumor_annotate_and_filter_DP${DP}
 pushd tumor_annotate_and_filter_DP${DP}
 
-# Process variants so that there is one variant per line (vcfallelicprimitives, vcfreakmulti), filter to remove variants with reference genotype (these are created when processing variants), 
+# Process variants so that there is one variant per line (vcfallelicprimitives, vcfreakmulti),
 # and name sample using filename.
 parallel -j ${JOBS} "vcfallelicprimitives -k {} | vcfbreakmulti | sed \"s/unknown/{/.}/\" > {/.}_norm.vcf" ::: ../*.vcf
 
