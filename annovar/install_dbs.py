@@ -51,7 +51,7 @@ ANNOVAR_DATABASES = [
     #{ 'name': 'caddgt20', 'host': 'annovar' },
 
     # ExAC exome sequencing.
-    { 'name': 'exac02', 'host': 'annovar' }
+    { 'name': 'exac03', 'host': 'annovar' }
 ]
 
 def install_annovar_dbs(annovar_dir='.', build='hg19', dest_dir='humandb'):
