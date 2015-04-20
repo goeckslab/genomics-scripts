@@ -25,8 +25,6 @@ ANNOVAR_DATABASES = [
 
     # -- Filtering databases --
 
-    # NOTE: these next three entries are excluded by default because they are very large.
-
     # Most recent 1000 genomes.
     { 'name': '1000g2014oct', 'host': 'annovar' },
 
@@ -51,7 +49,11 @@ ANNOVAR_DATABASES = [
     #{ 'name': 'caddgt20', 'host': 'annovar' },
 
     # ExAC exome sequencing.
-    { 'name': 'exac03', 'host': 'annovar' }
+    { 'name': 'exac03', 'host': 'annovar' },
+
+    # SIFT and PolyPhen.
+    { 'name': 'ljb26_sift', 'host': 'annovar' },
+    { 'name': 'ljb26_pp2hdiv', 'host': 'annovar' }
 ]
 
 def install_annovar_dbs(annovar_dir='.', build='hg19', dest_dir='humandb'):
@@ -87,7 +89,3 @@ if __name__ == "__main__":
         install_annovar_db(database=args.database)
     else:
         install_annovar_dbs()
-
-
-
-
