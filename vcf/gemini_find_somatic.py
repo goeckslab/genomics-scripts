@@ -132,11 +132,18 @@ if __name__ == "__main__":
     vcf_format = VCFRowFormat(simple_struct(db=gemini_db))
     print (vcf_format.header(None), file=output)
 
+    # Get counts, variants.
     counts, variants = get_somatic_variants(gemini_db, annotations, out_format=vcf_format)
 
+    # Sort variants by chrom and start position.
+    def get_chrom_and_start(v):
+        fields = v.split('\t')
+        return (int(fields[0][3:]), int(fields[1]))
+    variants.sort(key=get_chrom_and_start)
+    
     # Print header?
     if args.header:
-        print('%s Novel_SNPS Novel_Indels' % ' '.join(annotations))
+        print('#Sample %s Novel_SNPS Novel_Indels' % ' '.join(annotations))
 
     # Print output of variant counts.
     print( '%s %s' % ( db_name, ' '.join(str(c) for c in counts) ) )
