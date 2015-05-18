@@ -3,7 +3,6 @@
 #
 # Dependencies that should be in your PATH:
 #   GEMINI
-# 	bgzip & tabix
 #	vt
 #
 # Arguments:
@@ -28,6 +27,8 @@ INPUT_VCF=$1
 REFERENCE=$2
 ANNOTATIONS_DIR=$3
 GEMINI_PYTHONPATH=$4
+DEPTH=$5
+AB_NOVEL=$6
 COUNTS_FILE=$7
 HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 CREATE_GEMINI_DB="${HOME_DIR}/pipelines/create_gemini_db.sh"
