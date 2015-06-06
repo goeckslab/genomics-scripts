@@ -5,6 +5,7 @@
 # Usage:
 #   compute_bam_coverage.sh <input.bam>
 #
+# Dependencies: bedtools
 
 # Parameter testing and evaluation.
 if [ $# -ne "1" ]

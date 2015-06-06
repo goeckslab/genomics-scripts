@@ -4,8 +4,9 @@
 # Find somatic variants in a VCF using GEMINI.
 #
 # Dependencies that should be in your PATH:
-#   GEMINI
-#	vt
+#   GEMINI (https://github.com/arq5x/gemini, See ./install/install_gemini.sh for installation instructions)
+#	vt (https://github.com/atks/vt, see http://genome.sph.umich.edu/wiki/Vt#Installation for installation instructions)
+#   bcftools (https://github.com/samtools/bcftools, see http://www.htslib.org/download/ for installation instructions)
 #
 # Arguments:
 #   genome_fasta - fasta file for genome
