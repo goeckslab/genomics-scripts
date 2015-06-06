@@ -1,5 +1,14 @@
 #!/bin/sh
 
+#
+# Create a GEMINI database by (a) annotating variants with VEP or snpEff and (b) loading annotated variants
+# into GEMINI.
+#
+# Dependencies:
+#   VEP and/or snpEff
+#   gemini
+#
+
 # Parameter checking.
 if [ $# -ne "4" ]
 then
