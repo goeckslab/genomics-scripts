@@ -10,6 +10,7 @@
 #
 # Arguments:
 #   genome_fasta - fasta file for genome
+#   annotator_dir - directory for annotation tool
 #   annotations_dir - directory for annotations
 #   gemini_pythonpath - PYTHONPATH to GEMINI's python source
 #   depth - minimum variant depth [CURRENTLY IGNORED]
@@ -18,20 +19,21 @@
 #
 
 # Arguments check.
-if [ $# -ne "6" ]
+if [ $# -ne "7" ]
 then
-  echo "Usage: `basename $0` <genome_fasta> <annotations_dir> <gemini_pythonpath> <depth> <ab_novel> <counts_file>"
+  echo "Usage: `basename $0` <genome_fasta> <annotator_dir> <annotations_dir> <gemini_pythonpath> <depth> <ab_novel> <counts_file>"
   exit -1
 fi
 
 REFERENCE=$1
-ANNOTATIONS_DIR=$2
-GEMINI_PYTHONPATH=$3
-DEPTH=$4
-AB_NOVEL=$5
-COUNTS_FILE=$6
+ANNOTATOR_DIR=$2
+ANNOTATIONS_DIR=$3
+GEMINI_PYTHONPATH=$4
+DEPTH=$5
+AB_NOVEL=$6
+COUNTS_FILE=$7
 
-JOBS=2
+JOBS=16
 HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 TEMP="temp.txt"
 
@@ -41,7 +43,7 @@ pushd find_somatic
 touch ${TEMP}
 
 # Find somatic variants for all VCFs.
-parallel -j ${JOBS} "${HOME_DIR}/find_somatic_with_gemini.sh {} ${REFERENCE} ${ANNOTATIONS_DIR} ${GEMINI_PYTHONPATH} ${DEPTH} ${AB_NOVEL} ${TEMP}" ::: ../*.vcf
+parallel -j ${JOBS} "${HOME_DIR}/find_somatic_with_gemini.sh {} ${REFERENCE} ${ANNOTATOR_DIR} ${ANNOTATIONS_DIR} ${GEMINI_PYTHONPATH} ${DEPTH} ${AB_NOVEL} ${TEMP}" ::: ../*.vcf
 
 # Create final counts file.
 (head -n 1 ${TEMP}; grep -v ^# ${TEMP} | sort -k1,1) > ${COUNTS_FILE}
@@ -52,6 +54,10 @@ bcftools merge *.vcf.gz > all_somatic.vcf
 
 # Create GEMINI database.
 # TODO: annotate with TCGA, DOCM annotations.
-gemini load -v all_somatic.vcf -t VEP all_somatic.db
+
+# Because of the INFO bug in GEMINI v0.15.1, need to create gemini database (annotation + create)
+# rather than just create.
+#gemini load -v all_somatic.vcf -t VEP all_somatic.db
+/home/jgoecks/cbi-home/projects/genomics-scripts/pipelines/create_gemini_db.sh all_somatic.vcf all_somatic.db VEP /groups/cbi/jgoecks/tools/ensembl-tools-release-80/scripts/variant_effect_predictor
 
 popd

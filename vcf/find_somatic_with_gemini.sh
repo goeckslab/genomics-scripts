@@ -8,6 +8,7 @@
 # Arguments:
 #   vcf - VCF file to process
 #   genome_fasta - fasta file for genome
+#   annotator_dir - path to annotation program
 #   annotations_dir - directory for annotations
 #   gemini_pythonpath - PYTHONPATH to GEMINI's python source
 #   depth - minimum variant depth [CURRENTLY IGNORED]
@@ -16,20 +17,21 @@
 #
 
 # Arguments check.
-if [ $# -ne "7" ]
+if [ $# -ne "8" ]
 then
-  echo "Usage: `basename $0` <vcf> <genome_fasta> <annotations_dir> <gemini_pythonpath> <depth> <ab_novel> <counts_file>"
+  echo "Usage: `basename $0` <vcf> <genome_fasta> <annotator_dir> <annotations_dir> <gemini_pythonpath> <depth> <ab_novel> <counts_file>"
   exit -1
 fi
 
 # Set up variables.
 INPUT_VCF=$1
 REFERENCE=$2
-ANNOTATIONS_DIR=$3
-GEMINI_PYTHONPATH=$4
-DEPTH=$5
-AB_NOVEL=$6
-COUNTS_FILE=$7
+ANNOTATOR_DIR=$3
+ANNOTATIONS_DIR=$4
+GEMINI_PYTHONPATH=$5
+DEPTH=$6
+AB_NOVEL=$7
+COUNTS_FILE=$8
 HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 CREATE_GEMINI_DB="${HOME_DIR}/pipelines/create_gemini_db.sh"
 BASE=$(basename "$1" .vcf)
@@ -39,7 +41,7 @@ FIND_SOMATIC_SCRIPT="${HOME_DIR}/vcf/gemini_find_somatic.py"
 (grep ^# ${INPUT_VCF}; vt view -f "INFO.AB>0.02&&INFO.DP>50&&INFO.HP<5" ${INPUT_VCF}) | vt decompose -s - | vt normalize -r ${REFERENCE} -o ${BASE}_decnorm.vcf -
 
 # Annotate and create GEMINI db.
-${CREATE_GEMINI_DB} ${BASE}_decnorm.vcf ${BASE}.db VEP
+${CREATE_GEMINI_DB} ${BASE}_decnorm.vcf ${BASE}.db VEP ${ANNOTATOR_DIR}
 
 # Add annotations.
 ANNOS=""
