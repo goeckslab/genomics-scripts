@@ -1,16 +1,55 @@
-from __future__ import print_function
+"""
+Library for using GEMINI's API for somatic variant calling.
+"""
+
 import argparse
 import os
 
 from collections import namedtuple
 from gemini import GeminiQuery, DefaultRowFormat, VCFRowFormat
 
-"""
-Utility functions for working with GEMINI's API.
-"""
-
 COMMON_DATABASES = ["1kg", "exac", "esp"]
 BASE_VARIANT_QUERY = "select chrom, start, end, ref, alt from variants"
+
+class Variant(object):
+    def __init__(self, chrom=None, start=None, end=None, ref=None, alt=None, transcript=None,
+                 codon_change=None):
+        self.chrom = chrom
+        self.start = start
+        self.end = end
+        self.ref = ref
+        self.alt = alt
+        self.transcript = transcript
+        self.codon_change = codon_change
+
+    def is_adjacent(self, variant):
+        """
+        Returns true if this variant is next to another variant.
+        """
+        return self.chrom == variant.chrom and (self.start == variant.end or self.end == variant.start)
+
+    def combine_adjacent(self, variant):
+        """
+        Combine adjacent variants into a single variant.
+        """
+        if not self._is_adjecent(variant):
+            return None
+
+        if self.start < variant.start:
+            first = self
+            second = variant
+        else:
+            first = variant
+            second = self
+
+        return Variant(chrom=self.chrom, start=first.start, end=second.end, ref=(first.ref + second.ref),
+                       alt=(first.alt + second.alt))
+
+def get_gt_filter(gt_type, count):
+    """
+    Returns clause for filtering genotypes based on type and count.
+    """
+    return "(gt_types).(*).(==%s).(count > %i)" % (gt_type, count)
 
 def get_in_and_aff_clause(db, aaf=0.01):
     """
@@ -40,7 +79,6 @@ def get_annotation_and_no_common_clause(anno_col_name, has_anno=True, aaf=0.01):
     if not has_anno:
         val = 0
     return '%s AND %s' % ( get_annotation_clause(anno_col_name, val), get_no_common_vars_clause() )
-
 
 def get_novel_query(annotations, var_type='snp', allele_freq=0.1):
     """
@@ -84,73 +122,184 @@ def get_somatic_variants(gemini_db, annotations, out_format=DefaultRowFormat(Non
                 variants.append(result)
             else:
                 pass
-                #print ("******************* Result already in variants:")
-                #print (result.split('\t')[0:3])
+                #print "******************* Result already in variants:"
+                #print result.split('\t')[0:3]
             count += 1
         return count
 
     # Get variants in hotspots.
     for anno in annotations:
-        results = get_query_results(gemini_db, get_hotspot_variants(anno), out_format)
+        results = get_query_results(gemini_db, get_hotspot_variants(anno), out_format=out_format)
         count = add_variants(results)
         var_counts.append(count)
 
     # Get novel counts.
     for var_type in ['snp', 'indel']:
-        results = get_query_results(gemini_db, get_novel_query(annotations, var_type), out_format)
+        results = get_query_results(gemini_db, get_novel_query(annotations, var_type), out_format=out_format)
         count = add_variants(results)
         var_counts.append(count)
     return var_counts, variants
 
-def get_query_results(gemini_db, query, out_format):
+def get_amplicons(gemini_db):
+    """
+    Returns a tuple of amplicon, variants for all samples and amplicons that share more than one variant.
+    """
+
+    query = "SELECT gene, amplicon, gts.%s FROM variants"
+    gt_filter = "(gt_types).(*).(==HET).(count > 1) and gt_types.%s == HET or gt_types.%s == HOM_ALT"
+
+    for sample in get_samples(gemini_db):
+        variants = get_query_results(gemini_db, query % sample, gt_filter % (sample, sample))
+        amplicons_count = {}
+        for variant in variants:
+            #print variant
+            amplicons = variant['amplicon'].split(',')
+            for amplicon in amplicons:
+                if amplicon not in amplicons_count:
+                    amplicons_count[amplicon] = 0
+                amplicons_count[amplicon] += 1
+
+        amplicons_with_multiple_variants = False
+        for amplicon, count in amplicons_count.items():
+            if count > 1:
+                print sample, amplicon, count
+                amplicons_with_multiple_variants = True
+
+        if not amplicons_with_multiple_variants:
+            print sample, 'None', 0
+
+def get_samples(gemini_db):
+    """
+    Returns list of samples in a GEMINI database.
+    """
+    return [str(sample['name']) for sample in get_query_results(gemini_db, "select name from samples")]
+
+def compare_replicates(gemini_db):
+    """
+    Compare all replicates for shared variants and variants likely caused by deamination.
+    """
+
+    query = "SELECT chrom, start, ref, alt, gene, %s, %s FROM variants" 
+    gt_filter = "gt_types.%s == HET or gt_types.%s == HET or gt_types.%s == HOM_ALT or gt_types.%s == HOM_ALT"
+
+    # Loop through samples, querying replicates.
+    samples = get_samples(gemini_db)
+    for sample in samples:
+        # Only compare repeats.
+        if '_Repeats_' not in sample:
+            continue
+
+        # Query for variants where one or both samples are alternate.
+        sample_repeat = sample
+        sample_original = sample_repeat.replace('_Repeats_', '_FirstBatch_')
+        sample_repeat_gts = "gts." + sample_repeat
+        sample_original_gts = "gts." + sample_original
+
+        # If original sample is not present, skip.
+        if sample_original not in samples:
+            #print 'No original:', sample_original
+            continue
+
+        #print sample_repeat, sample_original
+        #print query % (sample_original_gts, sample_repeat_gts), gt_filter % (sample_original, sample_repeat, sample_original, sample_repeat)
+
+        variants = get_query_results(gemini_db, query % (sample_original_gts, sample_repeat_gts),
+                                     gt_filter % (sample_original, sample_repeat, sample_original, sample_repeat))
+
+        shared_count = 0
+        unique_count = 0
+        deamination_count = 0
+        for variant in variants:
+            #print variant
+            if variant[sample_original_gts] == variant[sample_repeat_gts]:
+                shared_count += 1
+            elif ( variant['ref'] == 'C' and (variant[sample_original_gts] == 'C/T' or variant[sample_repeat_gts] == 'C/T') ) or \
+                 ( variant['ref'] == 'G' and (variant[sample_original_gts] == 'G/A' or variant[sample_repeat_gts] == 'G/A') ):
+                deamination_count += 1
+            else:
+                # TODO: go back to original sample databases and see if variant exists at some AF (e.g. 5%); if so,
+                # keep variant. Example: 'chr7  116435999' for NATCH_FirstBatch_MRO10434-0022-M01-36124R3 where
+                # FirstBatch AF = 0.06 and Repeats AF = 0.12
+                #print variant
+                unique_count += 1
+
+        print sample_original, shared_count, deamination_count, unique_count
+
+def query_sample_het(gemini_db, sample, cols="chrom, start, end, ref, alt, gene, cosmic_ids", min_het_count=0):
+    """
+    Query database, returning columns + sample genotype 
+    """
+    query = "select %s , gts.%s from variants" % (cols, sample)
+    gt_filter = "gt_types.%s == HET and (gt_types).(*).(==HET).(count >= %i)" % (sample, min_het_count)
+    return get_query_results(gemini_db, query, gt_filter)
+
+def get_query_results(gemini_db, query, gt_filter="", out_format=DefaultRowFormat(None)):
     """
     Returns results of query.
     """
 
     gemini = GeminiQuery(gemini_db, out_format=out_format)
-    gemini.run(query)
+    gemini.run(query, gt_filter=gt_filter)
     return gemini
 
-
 if __name__ == "__main__":
-    # Argument setup.
+    # Argument setup and parsing.
     parser = argparse.ArgumentParser()
+    parser.add_argument("operation", help="Operation to perform")
+    parser.add_argument("gemini_db", help="Gemini database to use")
+    parser.add_argument("--sample", help="Sample to query for")
+    parser.add_argument("--cols", help="Columns to query for")
+    parser.add_argument("--gt_count", help="Minimum HET count")
+    parser.add_argument("--annotations", help="Annotations to query for")
+    parser.add_argument("--output_vcf", help="Write variants to this file")
     parser.add_argument("--header", action="store_true", help="Print header?")
-    parser.add_argument("gemini_db", help="Gemini database to query")
-    parser.add_argument("annotations", help="Annotations to query for")
-    parser.add_argument("output_vcf", help="Write variants to this file")
-
-    # Argument parsing.
     args = parser.parse_args()
-    annotations = args.annotations.split(',')
+    operation = args.operation
     gemini_db = args.gemini_db
-    db_name, ext = os.path.splitext( os.path.split(gemini_db)[1] )
-    output = open(args.output_vcf, 'w')
-
-    # Set up VCF formatter.
-    simple_struct = namedtuple('Simple', 'db')
-    vcf_format = VCFRowFormat(simple_struct(db=gemini_db))
-    print (vcf_format.header(None), file=output)
-
-    # Get counts, variants.
-    counts, variants = get_somatic_variants(gemini_db, annotations, out_format=vcf_format)
-
-    # Sort variants by chrom and start position.
-    def get_chrom_and_start(v):
-        fields = v.split('\t')
-        return (int(fields[0][3:]), int(fields[1]))
-    variants.sort(key=get_chrom_and_start)
     
-    # Print header?
-    if args.header:
-        print('#Sample %s Novel_SNPS Novel_Indels' % ' '.join(annotations))
+    # Do operation.
+    if operation == "find_somatic":
+        annotations = args.annotations.split(',')
+        db_name, ext = os.path.splitext( os.path.split(gemini_db)[1] )
+        output = open(args.output_vcf, 'w')
 
-    # Print output of variant counts.
-    print( '%s %s' % ( db_name, ' '.join(str(c) for c in counts) ) )
+        # Set up VCF formatter.
+        simple_struct = namedtuple('Simple', 'db')
+        vcf_format = VCFRowFormat(simple_struct(db=gemini_db))
+        output.write(vcf_format.header(None) + '\n')
 
-    # Print somatic variants VCF.
-    for variant in variants:
-        print(variant, file=output)
+        # Get counts, variants.
+        counts, variants = get_somatic_variants(gemini_db, annotations, out_format=vcf_format)
 
-    output.close()
+        # Sort variants by chrom and start position.
+        def get_chrom_and_start(v):
+            fields = v.split('\t')
+            return (int(fields[0][3:]), int(fields[1]))
+        variants.sort(key=get_chrom_and_start)
+        
+        # Print header?
+        if args.header:
+            print '#Sample %s Novel_SNPS Novel_Indels' % ' '.join(annotations)
+
+        # Print output of variant counts.
+        print '%s %s' % ( db_name, ' '.join(str(c) for c in counts) )
+
+        # Print somatic variants VCF.
+        for variant in variants:
+            output.write(variant + '\n')
+
+        output.close()
+    elif operation == "compare_replicates":
+        print "TODO: connect to function"
+    elif operation == "print_samples":
+        for sample in get_samples(gemini_db):
+            print sample
+    elif operation == "query_sample":
+        sample = args.sample
+        cols = args.cols or "chrom, start, end, ref, alt, gene, cosmic_ids"
+        gt_count = args.gt_count or 0
+        gt_count = int(gt_count)
+        for row in query_sample_het(gemini_db, sample, cols, gt_count):
+            print row
+
 
