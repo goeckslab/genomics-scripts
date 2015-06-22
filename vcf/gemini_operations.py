@@ -45,7 +45,13 @@ class Variant(object):
         return Variant(chrom=self.chrom, start=first.start, end=second.end, ref=(first.ref + second.ref),
                        alt=(first.alt + second.alt))
 
-def get_gt_filter(gt_type, count):
+def get_gt_filter(sample, gt_type):
+    """
+    Returns clause for filtering variants based on sample and GT type.
+    """
+    return "gt_types.%s == %s" % (sample, gt_type)
+
+def get_gt_count_filter(gt_type, count):
     """
     Returns clause for filtering genotypes based on type and count.
     """
@@ -85,18 +91,17 @@ def get_novel_query(annotations, var_type='snp', allele_freq=0.1):
     Return query to get novel variants.
     """
 
-    # Add clause for novel SNPs to require SIFT/PolyPhen to be true.
-    add_clause = None
+    add_clause = ""
     if var_type is 'snp':
-        add_clause = ""
-        add_clause = "AND (sift_pred = 'deleterious' AND polyphen_pred = 'probably_damaging')"
-    else:
-        add_clause = ""
-
+        #TODO: be more precise about which impacts in HIGH (e.g., stop_gain, stop_loss) and MED (e.g. non-synonymous) 
+        # should be selected
+        # Add clause for novel SNPs to require high impact or med impact + SIFT/PolyPhen to be true.
+        add_clause = "AND (impact_severity = 'HIGH' or (impact_severity = 'MED' AND " \
+                     "sift_pred = 'deleterious' AND polyphen_pred = 'probably_damaging'))"
+    
     # Set up query.
     no_anno = [get_annotation_clause(anno, has_anno=False) for anno in annotations]
-    return "%s WHERE (type = '%s') AND (impact_severity = 'MED' or impact_severity = 'HIGH') " \
-           "AND (allele_bal >= %f) AND %s AND %s %s" \
+    return "%s WHERE (type = '%s') AND (allele_bal >= %f) AND %s AND %s %s" \
            % ( BASE_VARIANT_QUERY, var_type, allele_freq, " AND ".join(no_anno), get_no_common_vars_clause(), add_clause)
 
 def get_hotspot_variants(annotation, allele_bal=0.02):
@@ -174,6 +179,9 @@ def get_samples(gemini_db):
     """
     return [str(sample['name']) for sample in get_query_results(gemini_db, "select name from samples")]
 
+def has_sample(gemini_db, sample):
+    return int( str( get_query_results(gemini_db, "select count(*) from samples where name='%s'" % sample).next() ) ) != 0
+
 def compare_replicates(gemini_db):
     """
     Compare all replicates for shared variants and variants likely caused by deamination.
@@ -225,12 +233,15 @@ def compare_replicates(gemini_db):
 
         print sample_original, shared_count, deamination_count, unique_count
 
-def query_sample_het(gemini_db, sample, cols="chrom, start, end, ref, alt, gene, cosmic_ids", min_het_count=0):
+def query_sample_het(gemini_db, sample, cols="chrom, start, end, ref, alt, gene, cosmic_ids", min_het_count=0, addl_gt_filter=None):
     """
-    Query database, returning columns + sample genotype 
+    Query database, returning columns + sample genotype for variants that are (a) HET for sample; 
+    (b) have a minimum number of hets total; and (c) meet additional genotype filters.
     """
-    query = "select %s , gts.%s from variants" % (cols, sample)
+    query = "select %s, gts.%s from variants" % (cols, sample)
     gt_filter = "gt_types.%s == HET and (gt_types).(*).(==HET).(count >= %i)" % (sample, min_het_count)
+    if addl_gt_filter:
+        gt_filter += ' and %s' % addl_gt_filter
     return get_query_results(gemini_db, query, gt_filter)
 
 def get_query_results(gemini_db, query, gt_filter="", out_format=DefaultRowFormat(None)):
