@@ -35,7 +35,7 @@ COUNTS_FILE=$8
 HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 CREATE_GEMINI_DB="${HOME_DIR}/pipelines/create_gemini_db.sh"
 BASE=$(basename "$1" .vcf)
-FIND_SOMATIC_SCRIPT="${HOME_DIR}/vcf/gemini_find_somatic.py"
+FIND_SOMATIC_SCRIPT="${HOME_DIR}/vcf/gemini_operations.py"
 
 # Remove cruft (low AB, low DP, or high HP), then decompose and normalize.
 (grep ^# ${INPUT_VCF}; vt view -f "INFO.AB>0.02&&INFO.DP>50&&INFO.HP<5" ${INPUT_VCF}) | vt decompose -s - | vt normalize -r ${REFERENCE} -o ${BASE}_decnorm.vcf -
@@ -58,4 +58,4 @@ for d in ${ANNOTATIONS_DIR}/*/ ; do
 done
 
 # Create VCF of somatic variants.
-PYTHONPATH=${GEMINI_PYTHONPATH} python ${FIND_SOMATIC_SCRIPT} --header ${BASE}.db ${ANNOS:1} ${BASE}_somatic.vcf >> ${COUNTS_FILE}
+PYTHONPATH=${GEMINI_PYTHONPATH} python ${FIND_SOMATIC_SCRIPT} --header --annotations ${ANNOS:1} --output_vcf ${BASE}_somatic.vcf find_somatic ${BASE}.db >> ${COUNTS_FILE}
