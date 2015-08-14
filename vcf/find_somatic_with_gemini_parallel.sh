@@ -33,7 +33,7 @@ DEPTH=$5
 AB_NOVEL=$6
 COUNTS_FILE=$7
 
-JOBS=16
+JOBS=2
 HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 TEMP="temp.txt"
 
@@ -58,6 +58,6 @@ bcftools merge *.vcf.gz > all_somatic.vcf
 # Because of the INFO bug in GEMINI v0.15.1, need to create gemini database (annotation + create)
 # rather than just create.
 #gemini load -v all_somatic.vcf -t VEP all_somatic.db
-/home/jgoecks/cbi-home/projects/genomics-scripts/pipelines/create_gemini_db.sh all_somatic.vcf all_somatic.db VEP /groups/cbi/jgoecks/tools/ensembl-tools-release-80/scripts/variant_effect_predictor
+${HOME_DIR}/../pipelines/create_gemini_db.sh all_somatic.vcf all_somatic.db VEP ${ANNOTATOR_DIR}
 
 popd

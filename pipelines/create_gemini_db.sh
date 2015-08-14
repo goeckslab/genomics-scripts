@@ -25,9 +25,9 @@ ANNO_DIR=$4
 
 # Annotate.
 if [ $ANNOTATION = "VEP" ]; then
+    # Can add --refseq to use refseq annotations.
     perl ${ANNO_DIR}/variant_effect_predictor.pl -i $1 \
     --cache \
-    --refseq \
     --offline \
     --assembly GRCh37 \
     --sift b \
