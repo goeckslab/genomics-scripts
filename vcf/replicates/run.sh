@@ -7,7 +7,7 @@ TARGET_DIRECTORY=${1:-.}
 HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd ../.. && pwd )"
 
 # Compress and index VCFs.
-${HOME_DIR}/bgzip_and_tabix.sh 
+${HOME_DIR}/vcf/bgzip_and_tabix.sh 
 
 # Merge VCFs.
 bcftools merge *.vcf.gz > all.vcf
